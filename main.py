@@ -1,43 +1,47 @@
-from fastapi import FastAPI
-
+from fastapi import FastAPI,HTTPException
+from api_request_response_models import UserCreate,UserResponse
 app = FastAPI()
 
 users = {}
 
-@app.get("/users")
+@app.get("/users",status_code=200)
 def get_all_users():
     return users;
 
-@app.get("/users/{user_id}")
+@app.get("/users/{user_id}",status_code=200,response_model=UserResponse)
 def get_user(user_id: int):
     if user_id in users:
         return users[user_id]
     else:
-        return {"error": "User not found"}
+        raise HTTPException(status_code=404, detail="User not found")
 
-@app.post("/users")
-def create_user( name: str, email: str):
+@app.post("/users",response_model=UserResponse,status_code=201)
+def create_user(user:UserCreate):
     
     user_id = len(users) + 1;
 
     if user_id in users:
-        return {"error": "User already exists"}
+        raise HTTPException(status_code=400, detail="User already exists")
     else:
-        users[user_id] = {"name": name, "email": email}
-        return {"message": "User created successfully"}    
+        users[user_id] = user ;
+    
+    return user;    
 
-@app.put("/users/{user_id}")
-def update_user(user_id: int, name: str = None, email: str = None):
+@app.put("/users/{user_id}",status_code=200)
+def update_user(user_id: int, user : UserCreate):
     if user_id in users:
-        users[user_id] = {"name": name, "email": email}
+        #No more updates to email or password after pydantic validation
+        user  = users[user_id] 
+        user.name = user.name ;
+        users[user_id] = user ;
         return {"message": "User updated successfully"}
     else:
-        return {"error": "User not found"}
+        raise HTTPException(status_code=404, detail="User not found")
 
-@app.delete("/users/{user_id}")
+@app.delete("/users/{user_id}",status_code=200)
 def delete_user(user_id: int):
     if user_id in users:
         del users[user_id]
         return {"message": "User deleted successfully"}
     else:
-        return {"error": "User not found"}
+       raise HTTPException(status_code=404, detail="User not found")
