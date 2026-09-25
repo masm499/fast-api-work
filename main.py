@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException,Response #Response allows us to set response headers and cookies
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 import crud_helpers
@@ -32,10 +32,9 @@ app = FastAPI()
 
 
 @app.post("/token", status_code=200)
-def user_login(
-    user: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+def get_token(user: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
 ):
-
+    # This is the token issuer when a user logs in using username and password.
     verified_user = crud_helpers.verify_login_credentials(
         user.username, user.password, db=db
     )
@@ -50,6 +49,46 @@ def user_login(
     access_token = security_helper.generate_access_token({"username": user.username})
 
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+def get_current_user(token: str = Depends(oauth_scheme), db: Session = Depends(get_db)):
+    # parse and verify the token
+    # get user information and return
+
+    try:
+
+        payload = security_helper.jwt.decode(
+            token, security_helper.SECRET_STRING, security_helper.ALGORITHM
+        )
+
+        email = payload.get("username", None)
+
+        if email is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid authentication credentials: Invalid Token",
+            )
+
+    except security_helper.JWTError:
+            raise HTTPException(
+            status_code=400, detail="Invalid authentication credentials : Invalid Token"
+            )
+
+    user = crud_helpers.get_user_by_email(email=email, db=db)
+
+    if user is None:
+
+        raise HTTPException(
+            status_code=400, detail="Invalid authentication credentials : Invalid Token"
+        )
+
+    return user
+
+
+@app.get("/users/me")
+def read_user_me(current_user: UserResponse = Depends(get_current_user)):
+    # 2. oauth2_scheme automatically redirects the request here.
+    return current_user
 
 
 @app.get("/users", status_code=200, response_model=list[UserResponse])
