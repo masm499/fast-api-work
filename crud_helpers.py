@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 
 from api_request_response_models import UserCreate
 from database_models import Users
-from security import hash_password, verify_password;
+from security import hash_password;
 
 
 def get_all_users(db: Session):

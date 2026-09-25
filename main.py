@@ -50,7 +50,7 @@ def create_user(user: UserCreate,db: Session = Depends(get_db)):
   try:
     user =crud_helpers.create_user(user=user,db=db);
   except Exception as e:
-    raise HTTPException(status_code=400, detail=f"{user.email} is already in use.")
+    raise HTTPException(status_code=400, detail=f"{user.email} is already in use. {e}")
     
   return user;
 
@@ -72,3 +72,4 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
         return {"message": "User has been deleted successfully"}
     else:
         raise HTTPException(status_code=404, detail="User not found")
+
