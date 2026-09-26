@@ -1,10 +1,10 @@
+import logging
+from typing import Optional
+
 from fastapi import (  # Response allows us to set response headers and cookies
-    Depends,
-    FastAPI,
-    HTTPException,
-    Response,
-)
+    Depends, FastAPI, HTTPException, Request, Response)
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 import crud_helpers
@@ -12,6 +12,8 @@ import database_models
 import security_helper
 from api_request_response_models import UserCreate, UserResponse
 from database import SessionLocal, engine
+
+logger = logging.getLogger("uvicorn.error")
 
 database_models.Base.metadata.create_all(bind=engine)
 
@@ -23,10 +25,11 @@ database_models.Base.metadata.create_all(bind=engine)
 # In this case, it is set to "token",
 # which corresponds to the /token endpoint defined in the application.
 
-oauth_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth_header_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 
 def get_db():
+
     db = SessionLocal()
     try:
         yield db
@@ -41,7 +44,7 @@ app = FastAPI()
 def get_token(
     user: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
 ):
-    # This is the token issuer when a user logs in using username and password.
+    # This is the token issuer when a user logs in using username and password via oauth2.
     verified_user = crud_helpers.verify_login_credentials(
         user.username, user.password, db=db
     )
@@ -58,17 +61,30 @@ def get_token(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-def get_current_user(token: str = Depends(oauth_scheme), db: Session = Depends(get_db)):
-    # parse and verify the token
-    # get user information and return
+def get_current_user(
+    request: Request,
+    token: str = Depends(oauth_header_scheme),
+    db: Session = Depends(get_db),
+):
 
     try:
+        if token is None:  # No token in the header, lets check the httpCookie
+
+            token = request.cookies.get("access_token")
+            # logger.info(f"Cookie Token:{token}");
+
+            if token is None:
+                raise HTTPException(
+                    status_code=401, detail="Invalid credentials. No token found."
+                )
 
         payload = security_helper.jwt.decode(
             token, security_helper.SECRET_STRING, security_helper.ALGORITHM
         )
 
-        email = payload.get("username", None)
+        email: str = payload.get("username", None)
+
+        # logger.info(f"Email retrieved : {email}")
 
         if email is None:
             raise HTTPException(
@@ -92,7 +108,7 @@ def get_current_user(token: str = Depends(oauth_scheme), db: Session = Depends(g
     return user
 
 
-@app.get("/users/me")
+@app.get("/users/me", response_model=UserResponse)
 def read_user_me(current_user: UserResponse = Depends(get_current_user)):
     # 2. oauth2_scheme automatically redirects the request here.
     return current_user
@@ -104,9 +120,7 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
     try:
         user = crud_helpers.create_user(user=user, db=db)
     except Exception as e:
-        raise HTTPException(
-            status_code=400, detail=f"{user.email} is already in use. {e}"
-        )
+        raise HTTPException(status_code=400, detail=f"{user.email} is already in use.")
 
     return user
 
@@ -123,9 +137,11 @@ def user_login(
     )
 
     if user is None:
-        raise HTTPException(status_code=404, detail="Your credentials are not valid.")
+        raise HTTPException(
+            status_code=404, detail="The username/password credentials are not valid."
+        )
 
-    token = security_helper.generate_access_token(({"username": user.username}))
+    token = security_helper.generate_access_token(({"username": form_data.username}))
 
     response.set_cookie(
         key="access_token",
@@ -192,3 +208,9 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
         return {"message": "User has been deleted successfully"}
     else:
         raise HTTPException(status_code=404, detail="User not found")
+
+
+@app.get("/logout", status_code=200)
+def logout_user(response: Response):
+    response.delete_cookie("access_token")
+    return {"message": "session has been closed successfully"}

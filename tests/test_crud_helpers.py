@@ -1,7 +1,8 @@
 import pytest
 from sqlalchemy.orm import Session
-from database import SessionLocal
+
 import crud_helpers
+from database import SessionLocal
 
 
 # 1. Create a pytest fixture to handle the database session life cycle

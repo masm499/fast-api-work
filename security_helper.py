@@ -13,7 +13,7 @@ def generate_access_token(user: dict, expire_duration: int = 30):
     # creating a shallow copy.
     to_encode = user.copy()
     token_expires_on = datetime.now() + timedelta(minutes=expire_duration)
-    to_encode.update({"expiry": token_expires_on})
+    to_encode.update({"expiry": token_expires_on.isoformat()})
 
     return jwt.encode(to_encode, algorithm=ALGORITHM, key=SECRET_STRING)
 
