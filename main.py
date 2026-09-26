@@ -1,11 +1,17 @@
-from fastapi import Depends, FastAPI, HTTPException,Response #Response allows us to set response headers and cookies
-from sqlalchemy.orm import Session
+from fastapi import (  # Response allows us to set response headers and cookies
+    Depends,
+    FastAPI,
+    HTTPException,
+    Response,
+)
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
+
 import crud_helpers
 import database_models
+import security_helper
 from api_request_response_models import UserCreate, UserResponse
 from database import SessionLocal, engine
-import security_helper
 
 database_models.Base.metadata.create_all(bind=engine)
 
@@ -32,7 +38,8 @@ app = FastAPI()
 
 
 @app.post("/token", status_code=200)
-def get_token(user: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+def get_token(
+    user: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
 ):
     # This is the token issuer when a user logs in using username and password.
     verified_user = crud_helpers.verify_login_credentials(
@@ -70,9 +77,9 @@ def get_current_user(token: str = Depends(oauth_scheme), db: Session = Depends(g
             )
 
     except security_helper.JWTError:
-            raise HTTPException(
+        raise HTTPException(
             status_code=400, detail="Invalid authentication credentials : Invalid Token"
-            )
+        )
 
     user = crud_helpers.get_user_by_email(email=email, db=db)
 
@@ -89,6 +96,48 @@ def get_current_user(token: str = Depends(oauth_scheme), db: Session = Depends(g
 def read_user_me(current_user: UserResponse = Depends(get_current_user)):
     # 2. oauth2_scheme automatically redirects the request here.
     return current_user
+
+
+@app.post("/register", response_model=UserResponse)
+def register_user(user: UserCreate, db: Session = Depends(get_db)):
+    # Next update is to use depends with create user.
+    try:
+        user = crud_helpers.create_user(user=user, db=db)
+    except Exception as e:
+        raise HTTPException(
+            status_code=400, detail=f"{user.email} is already in use. {e}"
+        )
+
+    return user
+
+
+@app.post("/login", status_code=200)
+def user_login(
+    response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+):
+
+    user = crud_helpers.verify_login_credentials(
+        form_data.username, form_data.password, db=db
+    )
+
+    if user is None:
+        raise HTTPException(status_code=404, detail="Your credentials are not valid.")
+
+    token = security_helper.generate_access_token(({"username": user.username}))
+
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        max_age=1800,
+        expires=1800,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+    )
+
+    return {"message": "Session has been successfully initiated."}
 
 
 @app.get("/users", status_code=200, response_model=list[UserResponse])

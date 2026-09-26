@@ -2,18 +2,28 @@ from sqlalchemy.orm import Session
 
 from api_request_response_models import UserCreate
 from database_models import Users
-from security_helper import hash_password
+from security_helper import hash_password, verify_password
 
 # This module only executes queries and return results or exceptions,
 # no validation or further processing is performed here
 
 
 def verify_login_credentials(email: str, password: str, db: Session):
-    return (
-        db.query(Users)
-        .filter(Users.email == email, Users.password == hash_password(password))
-        .first()
-    )
+    # 1. Look up the user by email first
+    user = db.query(Users).filter(Users.email == email).first()
+
+    # 2. If user doesn't exist, return None
+    if not user:
+        return None
+
+    # 3. Use Passlib to securely verify the raw password against the stored hash
+    # user.password contains the Argon2 hash retrieved from the database
+    is_password_correct = verify_password(password, user.password)
+
+    if not is_password_correct:
+        return None
+
+    return user
 
 
 def get_all_users(db: Session):

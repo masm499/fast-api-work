@@ -1,7 +1,7 @@
-from passlib.context import CryptContext
-from jose import JWTError, jwt
-
 from datetime import datetime, timedelta
+
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 
 SECRET_STRING = "MUHAMMAD_QURAN_HAQ"
 ALGORITHM = "HS256"
